@@ -7,4 +7,5 @@ langgraph
 chromadb
 sentence-transformers
 python-dotenv
+streamlit
 pypdf
