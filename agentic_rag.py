@@ -29,7 +29,7 @@ def build_graph(file_bytes):
     retriever = db.as_retriever()
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         google_api_key=os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY"))
     
 
