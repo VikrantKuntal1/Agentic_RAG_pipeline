@@ -25,8 +25,8 @@ def build_graph(file_bytes):
         tmp_path = tmp.name
 
     loader = PyPDFLoader(tmp_path)
-    pages = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    pages = loader.load()[:30]  # cap at 30 pages to stay within timeout
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=100)
     chunks = splitter.split_documents(pages)
 
     embeddings = load_embeddings()
@@ -127,6 +127,7 @@ load_embeddings()  # pre-load model at startup
 
 st.title("Doc Enquirer")
 st.write("Upload a PDF and ask questions about it.")
+st.caption("Note: Only the first 30 pages are processed.")
 
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
