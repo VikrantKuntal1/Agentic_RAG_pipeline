@@ -12,6 +12,12 @@ from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
 load_dotenv()
+
+# Set GOOGLE_API_KEY for the google-genai SDK (reads from env, not constructor)
+_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+if _api_key:
+    os.environ["GOOGLE_API_KEY"] = _api_key
+
 @st.cache_resource
 def build_graph(file_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -23,17 +29,11 @@ def build_graph(file_bytes):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(pages)
 
-    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004",
-        google_api_key=api_key
-    )
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     db = Chroma.from_documents(chunks, embeddings)
     retriever = db.as_retriever()
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     
 
     grade_prompt = PromptTemplate.from_template("""
