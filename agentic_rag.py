@@ -25,7 +25,7 @@ def build_graph(file_bytes):
 
     api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="models/text-embedding-004",
         google_api_key=api_key
     )
     db = Chroma.from_documents(chunks, embeddings)
