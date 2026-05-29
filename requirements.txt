@@ -1,5 +1,6 @@
 langchain-community
-langchain-google-genai
+langchain-google-genai==1.0.10
+google-generativeai
 langchain-text-splitters
 langchain-core
 langgraph
