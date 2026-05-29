@@ -15,6 +15,10 @@ from langgraph.graph import StateGraph, START, END
 load_dotenv()
 
 @st.cache_resource
+def load_embeddings():
+    return FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+
+@st.cache_resource
 def build_graph(file_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
@@ -25,7 +29,7 @@ def build_graph(file_bytes):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(pages)
 
-    embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+    embeddings = load_embeddings()
     db = Chroma.from_documents(chunks, embeddings)
     retriever = db.as_retriever()
 
@@ -118,6 +122,8 @@ Rewritten question:""")
     os.unlink(tmp_path)
     return builder.compile()
 
+
+load_embeddings()  # pre-load model at startup
 
 st.title("Doc Enquirer")
 st.write("Upload a PDF and ask questions about it.")
