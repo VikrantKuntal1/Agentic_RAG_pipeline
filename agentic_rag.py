@@ -6,18 +6,13 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 
 load_dotenv()
-
-# Set GOOGLE_API_KEY for the google-genai SDK (reads from env, not constructor)
-_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-if _api_key:
-    os.environ["GOOGLE_API_KEY"] = _api_key
 
 @st.cache_resource
 def build_graph(file_bytes):
@@ -34,7 +29,7 @@ def build_graph(file_bytes):
     db = Chroma.from_documents(chunks, embeddings)
     retriever = db.as_retriever()
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+    llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=os.getenv("GROQ_API_KEY"))
     
 
     grade_prompt = PromptTemplate.from_template("""
