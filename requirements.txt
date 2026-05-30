@@ -1,7 +1,6 @@
 langchain-community
 langchain-groq
-langchain-huggingface
-sentence-transformers
+fastembed
 langchain-text-splitters
 langchain-core
 langgraph
