@@ -1,6 +1,9 @@
 import streamlit as st
 import tempfile
 import os
+os.environ["FASTEMBED_CACHE_PATH"] = os.path.expanduser("~/fastembed_cache")
+os.makedirs(os.path.expanduser("~/fastembed_cache"), exist_ok=True)
+
 from typing import TypedDict
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
@@ -31,10 +34,29 @@ def build_graph(file_bytes):
 
     embeddings = load_embeddings()
     db = Chroma.from_documents(chunks, embeddings)
-    retriever = db.as_retriever()
+    retriever = db.as_retriever(search_kwargs={"k": 5})
+    retriever_broad = db.as_retriever(search_kwargs={"k": 10})
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=os.getenv("GROQ_API_KEY"))
-    
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        groq_api_key=os.getenv("GROQ_API_KEY")
+    )
+
+    intent_prompt = PromptTemplate.from_template("""
+Classify the user's request into one of two categories:
+1. "summarise" - if they want a summary, overview, key points, or general understanding of the document.
+2. "question" - if they have a specific question about the document that they want answered.
+Request: {question}
+Reply with only one word, either "summarise" or "question".""")
+
+    summary_prompt = PromptTemplate.from_template("""
+You are summarising a document. Using the content below, provide a clear and structured
+summary covering the main points, key details, and overall insights. Be concise but
+comprehensive, ensuring that the essence of the document is captured effectively.
+
+Document content:
+{content}
+Summary:""")
 
     grade_prompt = PromptTemplate.from_template("""
 You are grading whether retrieved chunks are relevant to a question.
@@ -61,6 +83,21 @@ Rewritten question:""")
         answer: str
         attempts: int
         verdict: str
+        intent: str
+
+    def detect_intent_node(state):
+        intent = (intent_prompt | llm | StrOutputParser()).invoke({
+            "question": state["question"]
+        })
+        return {"intent": intent.strip().lower()}
+
+    def summarise_node(state):
+        broad_chunks = retriever_broad.invoke("main topics overview summary")
+        content = "\n\n".join(doc.page_content for doc in broad_chunks)
+        answer = (summary_prompt | llm | StrOutputParser()).invoke({
+            "content": content
+        })
+        return {"answer": answer}
 
     def retrieve_node(state):
         return {"chunks": retriever.invoke(state["rewritten_question"])}
@@ -93,6 +130,11 @@ Rewritten question:""")
     def give_up_node(state):
         return {"answer": "I couldn't find a confident answer to that in the document."}
 
+    def route_after_intent(state):
+        if "summar" in state["intent"]:
+            return "summarise"
+        return "retrieve"
+
     def route_after_grade(state):
         if state["verdict"] == "yes":
             return "generate"
@@ -102,13 +144,20 @@ Rewritten question:""")
             return "give_up"
 
     builder = StateGraph(RAGState)
+    builder.add_node("detect_intent", detect_intent_node)
+    builder.add_node("summarise", summarise_node)
     builder.add_node("retrieve", retrieve_node)
     builder.add_node("grade", grade_node)
     builder.add_node("generate", generate_node)
     builder.add_node("rewrite", rewrite_node)
     builder.add_node("give_up", give_up_node)
 
-    builder.add_edge(START, "retrieve")
+    builder.add_edge(START, "detect_intent")
+    builder.add_conditional_edges("detect_intent", route_after_intent, {
+        "summarise": "summarise",
+        "retrieve": "retrieve"
+    })
+    builder.add_edge("summarise", END)
     builder.add_edge("retrieve", "grade")
     builder.add_conditional_edges("grade", route_after_grade, {
         "generate": "generate",
@@ -123,7 +172,7 @@ Rewritten question:""")
     return builder.compile()
 
 
-load_embeddings()  # pre-load model at startup
+load_embeddings()
 
 st.title("Doc Enquirer")
 st.write("Upload a PDF and ask questions about it.")
@@ -150,6 +199,7 @@ if uploaded_file:
                     "answer": "",
                     "attempts": 0,
                     "verdict": "",
+                    "intent": ""
                 })
             st.write("### Answer")
             st.write(result["answer"])
