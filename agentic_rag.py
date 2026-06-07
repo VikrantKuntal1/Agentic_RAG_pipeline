@@ -22,7 +22,7 @@ load_dotenv()
 def load_embeddings():
     return FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
-def build_graph(file_bytes):
+def build_graph(file_bytes, file_hash):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
@@ -33,7 +33,9 @@ def build_graph(file_bytes):
     chunks = splitter.split_documents(pages)
 
     embeddings = load_embeddings()
-    db = Chroma.from_documents(chunks, embeddings)
+    # Unique collection per document — prevents Chroma reusing the default
+    # "langchain" collection and mixing chunks from different documents
+    db = Chroma.from_documents(chunks, embeddings, collection_name=f"doc_{file_hash[:16]}")
     retriever = db.as_retriever(
         search_type="similarity_score_threshold",
         search_kwargs={"k": 6, "score_threshold": 0.3}
@@ -191,7 +193,7 @@ if uploaded_file:
     # Rebuild graph only when a different document is uploaded
     if st.session_state.get("file_hash") != file_hash:
         with st.spinner("Processing document..."):
-            st.session_state.graph = build_graph(file_bytes)
+            st.session_state.graph = build_graph(file_bytes, file_hash)
             st.session_state.file_hash = file_hash
         st.success(f"Loaded: {uploaded_file.name}")
     else:
