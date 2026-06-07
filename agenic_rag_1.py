@@ -93,6 +93,7 @@ Rewritten question:""")
         question: str
         rewritten_question: str
         chunks: list
+        contexts: list
         answer: str
         attempts: int
         verdict: str
@@ -110,7 +111,8 @@ Rewritten question:""")
         answer = (summary_prompt | llm | StrOutputParser()).invoke({
             "content": content
         })
-        return {"answer": answer}
+        contexts = [doc.page_content for doc in broad_chunks]
+        return {"answer": answer, "contexts": contexts}
 
     def retrieve_node(state):
         return {"chunks": retriever.invoke(state["rewritten_question"])}
@@ -129,7 +131,8 @@ Rewritten question:""")
             "context": chunks_text,
             "question": state["question"]
         })
-        return {"answer": answer}
+        contexts = [doc.page_content for doc in state["chunks"]]
+        return {"answer": answer, "contexts": contexts}
 
     def rewrite_node(state):
         new_question = (rewrite_prompt | llm | StrOutputParser()).invoke({
@@ -210,6 +213,7 @@ if uploaded_file:
             "question": question,
             "rewritten_question": question,
             "chunks": [],
+            "contexts": [],
             "answer": "",
             "attempts": 0,
             "verdict": "",
