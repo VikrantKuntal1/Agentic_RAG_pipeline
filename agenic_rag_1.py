@@ -192,7 +192,7 @@ st.write("Upload a PDF and ask questions about it.")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 if uploaded_file:
-    file_bytes = uploaded_file.read()
+    file_bytes = uploaded_file.getvalue()
     file_hash = hashlib.md5(file_bytes).hexdigest()
 
     # Rebuild graph only when a different document is uploaded (per session)
