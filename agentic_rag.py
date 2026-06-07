@@ -21,7 +21,7 @@ load_dotenv()
 def load_embeddings():
     return FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
-@st.cache_resource
+@st.cache_resource(hash_funcs={bytes: lambda x: hash(x)})
 def build_graph(file_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
@@ -34,7 +34,10 @@ def build_graph(file_bytes):
 
     embeddings = load_embeddings()
     db = Chroma.from_documents(chunks, embeddings)
-    retriever = db.as_retriever(search_kwargs={"k": 5})
+    retriever = db.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": 6, "score_threshold": 0.3}
+    )
     retriever_broad = db.as_retriever(search_kwargs={"k": 10})
 
     llm = ChatGroq(
