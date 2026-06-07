@@ -1,6 +1,7 @@
 import streamlit as st
 import tempfile
 import os
+import hashlib
 os.environ["FASTEMBED_CACHE_PATH"] = os.path.expanduser("~/fastembed_cache")
 os.makedirs(os.path.expanduser("~/fastembed_cache"), exist_ok=True)
 
@@ -21,7 +22,6 @@ load_dotenv()
 def load_embeddings():
     return FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
-@st.cache_resource(hash_funcs={bytes: lambda x: hash(x)})
 def build_graph(file_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
@@ -62,7 +62,9 @@ Document content:
 Summary:""")
 
     grade_prompt = PromptTemplate.from_template("""
-You are grading whether retrieved chunks are relevant to a question.
+You are grading whether retrieved chunks contain ANY information that could help answer the question.
+Be lenient — if the chunks are even partially relevant, reply yes.
+Only reply no if the chunks are completely unrelated to the question.
 Question: {question}
 Chunks: {chunks}
 Reply with only yes or no.""")
@@ -183,11 +185,19 @@ st.write("Upload a PDF and ask questions about it.")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 if uploaded_file:
-    st.success(f"Loaded: {uploaded_file.name}")
+    file_bytes = uploaded_file.read()
+    file_hash = hashlib.md5(file_bytes).hexdigest()
 
-    with st.spinner("Processing document..."):
-        graph = build_graph(uploaded_file.read())
+    # Rebuild graph only when a different document is uploaded
+    if st.session_state.get("file_hash") != file_hash:
+        with st.spinner("Processing document..."):
+            st.session_state.graph = build_graph(file_bytes)
+            st.session_state.file_hash = file_hash
+        st.success(f"Loaded: {uploaded_file.name}")
+    else:
+        st.success(f"Loaded: {uploaded_file.name}")
 
+    graph = st.session_state.graph
     question = st.text_input("Ask a question about the document")
 
     if st.button("Ask"):
