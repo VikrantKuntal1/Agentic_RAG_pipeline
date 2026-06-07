@@ -1,4 +1,3 @@
-from langsmith import traceable
 import streamlit as st
 import tempfile
 import os
@@ -7,7 +6,7 @@ os.environ["FASTEMBED_CACHE_PATH"] = os.path.expanduser("~/fastembed_cache")
 os.makedirs(os.path.expanduser("~/fastembed_cache"), exist_ok=True)
 
 from typing import TypedDict
-
+from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -16,14 +15,8 @@ from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
-from dotenv import load_dotenv
-load_dotenv(override=True)
 
-print("TRACING:", os.getenv("LANGSMITH_TRACING"))
-print("PROJECT:", os.getenv("LANGSMITH_PROJECT"))
-print("API KEY:", os.getenv("LANGSMITH_API_KEY")[:10] if os.getenv("LANGSMITH_API_KEY") else "NOT SET")
-print("DIRECT TEST:", os.getenv("LANGSMITH_API_KEY"))
-
+load_dotenv()
 
 @st.cache_resource
 def load_embeddings():
@@ -33,14 +26,15 @@ def build_graph(file_bytes, file_hash):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
+
     loader = PyPDFLoader(tmp_path)
     pages = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(pages)
 
     embeddings = load_embeddings()
-    # Unique collection per document — prevents Chroma reusing "langchain"
-    # collection and mixing chunks from different documents
+    # Unique collection per document — prevents Chroma reusing the default
+    # "langchain" collection and mixing chunks from different documents
     db = Chroma.from_documents(chunks, embeddings, collection_name=f"doc_{file_hash[:16]}")
     retriever = db.as_retriever(
         search_type="similarity_score_threshold",
@@ -71,7 +65,7 @@ Summary:""")
 
     grade_prompt = PromptTemplate.from_template("""
 You are grading whether retrieved chunks contain ANY information that could help answer the question.
-Be lenient - if the chunks are even partially relevant, reply yes.
+Be lenient — if the chunks are even partially relevant, reply yes.
 Only reply no if the chunks are completely unrelated to the question.
 Question: {question}
 Chunks: {chunks}
@@ -187,6 +181,7 @@ Rewritten question:""")
     os.unlink(tmp_path)
     return builder.compile()
 
+
 load_embeddings()
 
 st.title("Doc Enquirer")
@@ -195,31 +190,19 @@ st.write("Upload a PDF and ask questions about it.")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 if uploaded_file:
-    file_bytes = uploaded_file.getvalue()
+    file_bytes = uploaded_file.read()
     file_hash = hashlib.md5(file_bytes).hexdigest()
 
-    # Rebuild graph only when a different document is uploaded (per session)
+    # Rebuild graph only when a different document is uploaded
     if st.session_state.get("file_hash") != file_hash:
         with st.spinner("Processing document..."):
             st.session_state.graph = build_graph(file_bytes, file_hash)
             st.session_state.file_hash = file_hash
+        st.success(f"Loaded: {uploaded_file.name}")
+    else:
+        st.success(f"Loaded: {uploaded_file.name}")
 
-    st.success(f"Loaded: {uploaded_file.name}")
     graph = st.session_state.graph
-
-    @traceable(name="doc-enquirer-run")
-    def run_graph(question):
-        return graph.invoke({
-            "question": question,
-            "rewritten_question": question,
-            "chunks": [],
-            "contexts": [],
-            "answer": "",
-            "attempts": 0,
-            "verdict": "",
-            "intent": ""
-        })
-
     question = st.text_input("Ask a question about the document")
 
     if st.button("Ask"):
@@ -227,6 +210,15 @@ if uploaded_file:
             st.warning("Please enter a question.")
         else:
             with st.spinner("Searching and thinking..."):
-                result = run_graph(question)
+                result = graph.invoke({
+                    "question": question,
+                    "rewritten_question": question,
+                    "chunks": [],
+                    "contexts": [],
+                    "answer": "",
+                    "attempts": 0,
+                    "verdict": "",
+                    "intent": ""
+                })
             st.write("### Answer")
             st.write(result["answer"])
